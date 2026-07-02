@@ -1,12 +1,12 @@
-## 顺序表实现学生成绩管理
+## 顺序表实现学生成绩管理系统
 
 ### AI交流记录
 
 Q:
-```docx
+
 @/work_1.c 
 当前项目基于C语言使用顺序表的方法建造一个学生成绩管理系统，检查其内容，完善change_data()函数，并指出其存在哪些bug及需要修改的地方
-```
+
 A:
 一、原代码存在的 Bug 及问题
 
@@ -369,3 +369,828 @@ int main()
     return 0;
 }
 ```
+
+
+## 链表实现学生管理系统
+
+### AI交流记录
+
+Q:
+```docx
+@/work_2.c 
+刚项目基于C语言链表知识设计的学生成绩管理系统，检查当前代码，指出bug及需要改善的地方并给出解释
+```
+
+A:
+```.md
+# `work_2.c` 代码审查报告
+
+  
+
+## 一、严重 Bug（会导致程序崩溃或行为异常）
+
+  
+
+### Bug 1：`scanf` 漏写取地址符号 `&`（case 3 查找功能）
+
+  
+
+**位置**：`main()` 函数中 case 3 分支，第 68 行
+
+  
+
+```c
+
+scanf("%d", id);  // 错误：漏写 & 符号
+
+```
+
+  
+
+**影响**：传递给 `scanf` 的是 `id` 变量的值（非初始化状态为垃圾值），而非 `id` 的地址。`scanf` 会将该垃圾值视为地址进行写入，**必然导致段错误（Segmentation Fault）或程序崩溃**。
+
+  
+
+**修正**：改为 `scanf("%d", &id);`
+
+  
+
+---
+
+  
+
+### Bug 2：`insertStudent` 函数缺少返回类型
+
+  
+
+**位置**：第 107 行
+
+  
+
+```c
+
+insertStudent(Student *newNode)
+
+{
+
+```
+
+  
+
+**影响**：C 语言中未显式指定返回类型时默认返回 `int`，但该函数实际不返回任何值。**这是一个语法警告级别的错误**，严格来说不符合 C99/C11 标准，在某些编译器设置下可能导致编译失败。
+
+  
+
+**修正**：在函数名前加 `void`
+
+  
+
+```c
+
+void insertStudent(Student *newNode)
+
+```
+
+  
+
+---
+
+  
+
+### Bug 3：`isIdExist` 函数在 `case 1` 中被调用时，`id` 变量存放的是前一次操作的残留值
+
+  
+
+**位置**：在 case 1 中，`scanf` 读取 `id` 后立即调用 `isIdExist(id)`，这段逻辑本身正确。但在 `case 3` 中，`scanf("%d", id)`（Bug 1）写入错误的内存位置，可能导致 `id` 变量的值被意外修改。
+
+  
+
+**影响**：因 Bug 1 的 `scanf` 错误写入不可预测的内存区域，`id` 变量的实际值可能改变，后续所有使用 `id` 的操作结果都将不可预测。
+
+  
+
+---
+
+  
+
+### Bug 4：`insertStudent` 未检查重复学号（防御性不足）
+
+  
+
+**位置**：第 107-131 行
+
+  
+
+**影响**：虽然在 `main` 的 case 1 中已经调用 `isIdExist` 做了检查，但如果未来有其他代码绕过 `main` 直接调用 `insertStudent`，则可能插入重复学号。`insertStudent` 作为公共接口应自行保证数据完整性。
+
+  
+
+**修正**：在 `insertStudent` 内部添加学号重复检查。
+
+  
+
+---
+
+  
+
+### Bug 5：`freeList` 后未对全局变量 `head` 置 `NULL` 的影响
+
+  
+
+**虽然代码中已经做了 `head = NULL`，但考虑以下场景：**
+
+  
+
+如果 `freeList()` 被调用后，程序没有立即 `exit` 而是继续运行（例如未来重构为多次初始化/释放），由于 `head` 已被置 `NULL`，后续操作可以安全进行。目前代码中调用 `freeList` 后直接 `break` 跳出 `switch`，但**外层 `while(1)` 循环仍在继续**，此时 `head == NULL`，后续操作会正确处理空链表状态。然而 `case 6` 本应该退出程序，却只是 `break` 跳出 switch 继续循环。
+
+  
+
+**这是一个逻辑 Bug**：用户选择"退出"后，程序释放内存但没有退出，而是再次显示菜单。
+
+  
+
+**修正**：在 `case 6` 的 `freeList()` 之后应调用 `exit(0)` 或 `return 0` 退出程序。
+
+  
+
+---
+
+  
+
+### 二、严重性较低的 Bug / 设计缺陷
+
+  
+
+### 缺陷 1：`scanf` 输入字符串可能缓冲区溢出
+
+  
+
+**位置**：第 49 行
+
+  
+
+```c
+
+scanf("%s", name); // name 大小为 50
+
+```
+
+  
+
+**问题**：`scanf("%s")` 不限制读取长度，用户输入超过 49 个字符（含 null 终止符）时会**缓冲区溢出**，破坏栈上其他变量的值。
+
+  
+
+**改进**：
+
+```c
+
+scanf("%49s", name);
+
+```
+
+或使用 `fgets` 等更安全的输入函数。
+
+  
+
+---
+
+  
+
+### 缺陷 2：菜单输入不处理非法字符
+
+  
+
+**位置**：`scanf("%d", &choice)`
+
+  
+
+**问题**：如果用户输入非数字字符（如 'a'），`scanf` 会返回 0，输入缓冲区中的 'a' 未被消费，导致无限循环输出"无效选择"。
+
+  
+
+**改进**：检查 `scanf` 返回值，若读取失败则清空输入缓冲区。
+
+  
+
+---
+
+  
+
+### 缺陷 3：全局变量 `head` 不利于扩展和维护
+
+  
+
+**问题**：使用全局链表头指针 `head`，使得程序只能管理"一个"学生链表，无法支持多班级、多数据源等场景。应封装为局部变量传递给各个函数。
+
+  
+
+**改进**：将 `head` 改为 `main` 中的局部变量，并在所有操作函数中作为参数传递。
+
+  
+
+---
+
+  
+
+### 缺陷 4：`scanf` 读取成绩后，换行符留在缓冲区
+
+  
+
+**位置**：第 52 行
+
+  
+
+**问题**：`scanf("%f", &score)` 读取成绩后会留一个 `\n` 在输入缓冲区。对于当前菜单交互没问题，但如果后续添加需要读取字符的操作（如 `getchar`），`\n` 会被意外读走。
+
+  
+
+**改进**：读取后可以增加 `getchar()` 消费残留换行符。
+
+  
+
+---
+
+  
+
+### 缺陷 5：`displayAll` 输出格式未对齐
+
+  
+
+**问题**：使用 `\t` 制表符对齐，但当学号/姓名字符串长度不同时，制表位会导致列不对齐。
+
+  
+
+**改进**：使用 `%-10d %-20s %-8.2f` 等格式化输出确保对齐。
+
+  
+
+---
+
+  
+
+### 缺陷 6：`isIdExist` 函数重复遍历链表
+
+  
+
+**问题**：在 `insertStudent` 前调用 `isIdExist` 会遍历一次链表，随后 `insertStudent` 插入时又可能再次遍历链表找到插入位置，对于长链表效率较低。
+
+  
+
+**改进**：可让 `insertStudent` 返回插入状态（成功/失败），在插入时一并完成重复检查，省去提前查找的开销。
+
+  
+
+---
+
+  
+
+### 缺陷 7：代码没有包含 `<conio.h>` 或使用 `getchar` 暂停程序
+
+  
+
+**问题**：在 Windows 上运行 `.exe` 时，程序可能在执行完毕后立即关闭控制台窗口，用户来不及看到结果。某些操作后程序直接进入下一轮循环，用户希望暂停查看结果。
+
+  
+
+**改进**：可在关键操作后添加 `system("pause");`（Windows）或通用的 `getchar()` 暂停。
+
+  
+
+---
+
+  
+
+### 三、总结
+
+  
+
+| 严重程度 | 问题 | 影响 | 是否必须修复 |
+
+|---------|------|------|------------|
+
+| 🔴 严重 | `scanf("%d", id)` 漏写 `&` | 查找功能必崩溃 | ✅ 必须 |
+
+| 🔴 严重 | `insertStudent` 缺少返回类型 | 编译警告/错误 | ✅ 必须 |
+
+| 🔴 严重 | `case 6` 退出后没有真正退出 | 无法退出程序 | ✅ 必须 |
+
+| 🟡 中等 | `scanf("%s")` 缓冲区溢出 | 输入过长时崩溃 | 建议修复 |
+
+| 🟡 中等 | `scanf` 非法字符导致死循环 | 输入字母后无法继续 | 建议修复 |
+
+| 🟡 中等 | `insertStudent` 未自查重复学号 | 数据可能不一致 | 建议修复 |
+
+| 🟢 建议 | 全局变量、输出格式、效率等 | 代码质量和维护性 | 锦上添花 |
+
+
+### 项目源码
+
+```c
+#include <stdio.h>
+
+#include <stdlib.h>
+
+#include <string.h>
+
+  
+
+// 学生结构体
+
+typedef struct Student
+
+{
+
+    int id;               // 学号（唯一标识）
+
+    char name[50];        // 姓名
+
+    float score;          // 成绩
+
+    struct Student *next; // 指向下一个节点的指针
+
+} Student;
+
+  
+
+// 全局链表头指针（初始为空）
+
+Student *head = NULL;
+
+  
+
+// 函数声明
+
+Student *createStudent(int id, const char *name, float score);
+
+void insertStudent(Student *newNode);
+
+void deleteStudent(int id);
+
+Student *findStudent(int id);
+
+void updateStudent(int id);
+
+void displayAll();
+
+void freeList();
+
+int isIdExist(int id);
+
+  
+
+int main()
+
+{
+
+    int choice, id;
+
+    char name[50];
+
+    float score;
+
+  
+
+    while (1)
+
+    {
+
+        printf("\n========== 学生成绩管理系统 ==========\n");
+
+        printf("1. 添加学生\n");
+
+        printf("2. 删除学生（按学号）\n");
+
+        printf("3. 查找学生（按学号）\n");
+
+        printf("4. 修改学生成绩（按学号）\n");
+
+        printf("5. 显示所有学生\n");
+
+        printf("6. 退出\n");
+
+        printf("请选择操作: ");
+
+        scanf("%d", &choice);
+
+  
+
+        switch (choice)
+
+        {
+
+        case 1:
+
+            printf("请输入学号: ");
+
+            scanf("%d", &id);
+
+            if (isIdExist(id))
+
+            {
+
+                printf("该学号已存在，添加失败！\n");
+
+                break;
+
+            }
+
+            printf("请输入姓名: ");
+
+            scanf("%s", name); // 简单输入，假设不含空格
+
+            printf("请输入成绩: ");
+
+            scanf("%f", &score);
+
+            Student *newNode = createStudent(id, name, score);
+
+            insertStudent(newNode);
+
+            printf("添加成功！\n");
+
+            break;
+
+  
+
+        case 2:
+
+            printf("请输入要删除的学号: ");
+
+            scanf("%d", &id);
+
+            deleteStudent(id);
+
+            break;
+
+  
+
+        case 3:
+
+            printf("请输入要查找的学号: ");
+
+            scanf("%d", &id);
+
+            Student *found = findStudent(id);
+
+            if (found)
+
+            {
+
+                printf("找到学生: 学号=%d, 姓名=%s, 成绩=%.2f\n", found->id, found->name, found->score);
+
+            }
+
+            else
+
+            {
+
+                printf("未找到该学号！\n");
+
+            }
+
+            break;
+
+  
+
+        case 4:
+
+            printf("请输入要修改成绩的学号: ");
+
+            scanf("%d", &id);
+
+            updateStudent(id);
+
+            break;
+
+  
+
+        case 5:
+
+            displayAll();
+
+            break;
+
+  
+
+        case 6:
+
+            freeList(); // 释放所有节点内存
+
+            printf("程序退出，已释放内存。\n");
+
+            return 0;
+
+  
+
+        default:
+
+            printf("无效选择，请重新输入！\n");
+
+        }
+
+    }
+
+}
+
+  
+
+// 创建新节点
+
+Student *createStudent(int id, const char *name, float score)
+
+{
+
+    Student *newNode = (Student *)malloc(sizeof(Student));
+
+    if (!newNode)
+
+    {
+
+        printf("内存分配失败！\n");
+
+        exit(1);
+
+    }
+
+    newNode->id = id;
+
+    strcpy(newNode->name, name);
+
+    newNode->score = score;
+
+    newNode->next = NULL;
+
+    return newNode;
+
+}
+
+  
+
+// 按学号升序插入链表（无重复学号）
+
+void insertStudent(Student *newNode)
+
+{
+
+    // 如果链表为空，直接作为头节点
+
+    if (head == NULL)
+
+    {
+
+        head = newNode;
+
+        return;
+
+    }
+
+  
+
+    // 如果新学号小于头节点学号，插入到头部
+
+    if (newNode->id < head->id)
+
+    {
+
+        newNode->next = head;
+
+        head = newNode;
+
+        return;
+
+    }
+
+  
+
+    // 遍历找到合适位置（保持升序）
+
+    Student *cur = head;
+
+    while (cur->next != NULL && cur->next->id < newNode->id)
+
+    {
+
+        cur = cur->next;
+
+    }
+
+    // 插入到 cur 之后
+
+    newNode->next = cur->next;
+
+    cur->next = newNode;
+
+}
+
+  
+
+// 删除指定学号的学生
+
+void deleteStudent(int id)
+
+{
+
+    if (head == NULL)
+
+    {
+
+        printf("链表为空，无法删除！\n");
+
+        return;
+
+    }
+
+  
+
+    Student *cur = head;
+
+    Student *prev = NULL;
+
+  
+
+    // 查找要删除的节点
+
+    while (cur != NULL && cur->id != id)
+
+    {
+
+        prev = cur;
+
+        cur = cur->next;
+
+    }
+
+  
+
+    if (cur == NULL)
+
+    {
+
+        printf("未找到学号 %d，删除失败！\n", id);
+
+        return;
+
+    }
+
+  
+
+    // 删除节点
+
+    if (prev == NULL)
+
+    {
+
+        // 删除头节点
+
+        head = cur->next;
+
+    }
+
+    else
+
+    {
+
+        prev->next = cur->next;
+
+    }
+
+    free(cur);
+
+    printf("学号 %d 删除成功！\n", id);
+
+}
+
+  
+
+// 按学号查找
+
+Student *findStudent(int id)
+
+{
+
+    Student *cur = head;
+
+    while (cur != NULL)
+
+    {
+
+        if (cur->id == id)
+
+            return cur;
+
+        cur = cur->next;
+
+    }
+
+    return NULL;
+
+}
+
+  
+
+// 修改学生成绩
+
+void updateStudent(int id)
+
+{
+
+    Student *stu = findStudent(id);
+
+    if (stu == NULL)
+
+    {
+
+        printf("未找到学号 %d，修改失败！\n", id);
+
+        return;
+
+    }
+
+    printf("当前成绩为 %.2f，请输入新成绩: ", stu->score);
+
+    float newScore;
+
+    scanf("%f", &newScore);
+
+    stu->score = newScore;
+
+    printf("成绩修改成功！\n");
+
+}
+
+  
+
+// 显示所有学生信息
+
+void displayAll()
+
+{
+
+    if (head == NULL)
+
+    {
+
+        printf("链表为空，暂无学生信息。\n");
+
+        return;
+
+    }
+
+    printf("\n所有学生信息（按学号升序）:\n");
+
+    printf("学号\t姓名\t成绩\n");
+
+    Student *cur = head;
+
+    while (cur != NULL)
+
+    {
+
+        printf("%d\t%s\t%.2f\n", cur->id, cur->name, cur->score);
+
+        cur = cur->next;
+
+    }
+
+}
+
+  
+
+// 检查学号是否已存在
+
+int isIdExist(int id)
+
+{
+
+    return findStudent(id) != NULL;
+
+}
+
+  
+
+// 释放整个链表
+
+void freeList()
+
+{
+
+    Student *cur = head;
+
+    while (cur != NULL)
+
+    {
+
+        Student *tmp = cur;
+
+        cur = cur->next;
+
+        free(tmp);
+
+    }
+
+    head = NULL;
+
+}
+```
+
